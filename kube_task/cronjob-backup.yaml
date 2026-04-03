@@ -20,3 +20,5 @@ spec:
                   mkdir -p /app/logs;
                   wget -q -O /app/logs/app.log http://my-app-svc/logs;
                   tar -czf /tmp/app-logs-${ts}.tar.gz /app/logs/;
+                  ls -lah /tmp/app-logs-*.tar.gz;
+                  sleep 600;
