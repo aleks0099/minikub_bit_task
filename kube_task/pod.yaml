@@ -7,12 +7,15 @@ spec:
     - name: my-app
       image: my-app:latest
       imagePullPolicy: IfNotPresent
-      envFrom:
-        - configMapRef:
-            name: my-app-config
       volumeMounts:
         - name: logs-volume
           mountPath: /app/logs
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
   volumes:
     - name: logs-volume
       emptyDir: {}
+    - name: config-volume
+      configMap:
+        name: my-app-config

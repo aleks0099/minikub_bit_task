@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: my-app-vs
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - my-app-gateway
+  http:
+    - match:
+        - uri:
+            exact: /log
+          method:
+            exact: POST
+      headers:
+        request:
+          set:
+            X-Delay-Seconds: "2"
+      route:
+        - destination:
+            host: my-app-svc
+            port:
+              number: 80
+      timeout: 1s
+      retries:
+        attempts: 2
+    - match:
+        - uri:
+            exact: /
+        - uri:
+            exact: /status
+        - uri:
+            exact: /logs
+      route:
+        - destination:
+            host: my-app-svc
+            port:
+              number: 80
+    - match:
+        - uri:
+            prefix: /
+      directResponse:
+        status: 404
+        body:
+          string: "Not Found"

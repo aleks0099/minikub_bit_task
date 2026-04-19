@@ -17,7 +17,14 @@ spec:
           command:
             - /bin/sh
             - -c
-            - "tail -n +1 -F /var/log/pods/*/my-app/*.log 2>/dev/null"
+            - >
+              while true; do
+                files=$(find -L /var/log/pods -path '*/my-app/*.log');
+                if [ -n "$files" ]; then
+                  tail -n +1 -f $files || true;
+                fi;
+                sleep 2;
+              done
           volumeMounts:
             - name: pod-logs
               mountPath: /var/log/pods

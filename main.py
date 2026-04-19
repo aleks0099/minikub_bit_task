@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
+CONFIG_DIR = Path("/app/config")
 LOGS_DIR = Path("/app/logs")
 LOG_FILE = LOGS_DIR / "app.log"
 
@@ -15,6 +17,18 @@ def create_log_file():
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     if not LOG_FILE.exists():
         LOG_FILE.touch()
+
+
+def get_config_value(name: str, default: str):
+    config_file = CONFIG_DIR / name
+    if config_file.exists():
+        value = config_file.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    value = os.getenv(name)
+    if value:
+        return value
+    return default
 
 
 def create_log_msg(message: str):
@@ -33,7 +47,7 @@ def read_logs():
 
 @app.get("/")
 def root():
-    return os.getenv("WELCOME_MESSAGE", "Welcome to the custom app")
+    return get_config_value("WELCOME_MESSAGE", "Welcome to the custom app")
 
 
 @app.get("/status")
@@ -47,6 +61,12 @@ def write_log():
     message = payload.get("message")
     if not message or not isinstance(message, str):
         return jsonify({"error": "message is required"}), 400
+    delay_seconds = request.headers.get("X-Delay-Seconds")
+    if delay_seconds:
+        try:
+            time.sleep(float(delay_seconds))
+        except ValueError:
+            pass
     create_log_msg(message)
     return jsonify({"result": "written"})
 
@@ -58,7 +78,7 @@ def logs():
 
 if __name__ == "__main__":
     create_log_file()
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = get_config_value("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
-    port = int(os.getenv("APP_PORT", "8080"))
+    port = int(get_config_value("APP_PORT", "8080"))
     app.run(host="0.0.0.0", port=port)
