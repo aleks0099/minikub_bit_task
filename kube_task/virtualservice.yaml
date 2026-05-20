@@ -32,6 +32,8 @@ spec:
             exact: /status
         - uri:
             exact: /logs
+        - uri:
+            exact: /metrics
       route:
         - destination:
             host: my-app-svc

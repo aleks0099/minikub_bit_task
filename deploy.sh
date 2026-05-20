@@ -1,25 +1,52 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-wait_for_deployment() {
+MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-minikube}"
+MINIKUBE_DRIVER="${MINIKUBE_DRIVER:-docker}"
+
+wait_for_deployment_object() {
   local namespace="$1"
   local name="$2"
 
   until kubectl get deployment "$name" -n "$namespace" >/dev/null 2>&1; do
     sleep 2
   done
+}
 
+wait_for_deployment() {
+  local namespace="$1"
+  local name="$2"
+
+  wait_for_deployment_object "$namespace" "$name"
   kubectl rollout status deployment/"$name" -n "$namespace" --timeout=300s
 }
 
-eval "$(minikube -p minikube docker-env --shell bash)"
-docker build --pull=false -t my-app:latest .
+patch_istio_resource_requests() {
+  wait_for_deployment_object istio-system istiod
+  kubectl patch deployment istiod -n istio-system --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"100m"},{"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"512Mi"}]'
+}
 
-minikube addons enable istio-provisioner
-minikube addons enable istio
+wait_for_istiod() {
+  for _ in 1 2 3 4 5; do
+    patch_istio_resource_requests
+    if kubectl rollout status deployment/istiod -n istio-system --timeout=120s; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+minikube start -p "$MINIKUBE_PROFILE" --driver="$MINIKUBE_DRIVER"
+
+eval "$(minikube -p "$MINIKUBE_PROFILE" docker-env --shell bash)"
+DOCKER_BUILDKIT=0 docker build --pull=false -t my-app:latest .
+
+minikube -p "$MINIKUBE_PROFILE" addons enable istio-provisioner
+minikube -p "$MINIKUBE_PROFILE" addons enable istio
 
 wait_for_deployment istio-operator istio-operator
-wait_for_deployment istio-system istiod
+wait_for_istiod
+kubectl delete pod -n istio-system -l app=istio-ingressgateway --ignore-not-found
 wait_for_deployment istio-system istio-ingressgateway
 
 kubectl label namespace default istio-injection=enabled --overwrite
@@ -42,3 +69,5 @@ kubectl apply -f kube_task/cronjob-backup.yaml
 kubectl apply -f kube_task/gateway.yaml
 kubectl apply -f kube_task/virtualservice.yaml
 kubectl apply -f kube_task/destinationrule.yaml
+kubectl apply -f kube_task/prometheus.yaml
+wait_for_deployment default prometheus
